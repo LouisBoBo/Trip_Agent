@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多智能体对话系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background-color: #ffffff;
+            color: #333;
+            overflow: hidden;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            height: 100vh;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .header {
+            text-align: center;
+            padding: 40px 20px 30px;
+            flex-shrink: 0;
+        }
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        .logo {
+            font-size: 32px;
+        }
+        .title {
+            font-size: 28px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-height: 0;
+        }
+        .message {
+            display: flex;
+            flex-direction: column;
+        }
+        .message.user {
+            align-items: flex-end;
+        }
+        .message.ai {
+            align-items: flex-start;
+        }
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        .message.user .message-bubble {
+            background-color: #007AFF;
+            color: #ffffff;
+            border-bottom-right-radius: 4px;
+        }
+        .message.ai .message-bubble {
+            background-color: #f5f5f5;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+        .message-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+            padding: 0 4px;
+        }
+        .input-container {
+            padding: 20px 0;
+            flex-shrink: 0;
+            background-color: #ffffff;
+        }
+        .input-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .input-box {
+            position: relative;
+            background-color: #f5f5f5;
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            min-height: 56px;
+        }
+        #messageInput {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-size: 16px;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+            color: #333;
+            line-height: 1.5;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #messageInput::placeholder {
+            color: #999;
+        }
+        .input-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .icon-btn, .send-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .send-btn {
+            background-color: #007AFF;
+            color: #ffffff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            padding: 10px;
+        }
+        .send-btn:hover {
+            background-color: #0056b3;
+        }
+        .input-options {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .option-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .option-btn:hover {
+            background-color: #e8e8e8;
+        }
+        .option-btn.active {
+            background-color: #007AFF;
+            color: #ffffff;
+            border-color: #007AFF;
+        }
+        .loading {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+        }
+        .loading-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #999;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部标题区域 -->
+        <div class="header">
+            <div class="logo-container">
+                <div class="logo">🐋</div>
+                <h1 class="title">旅行智能助手</h1>
+            </div>
+        </div>
+
+        <!-- 聊天消息区域 -->
+        <div class="chat-container" id="chatContainer">
+            <!-- 消息将动态添加到这里 -->
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="input-container">
+            <div class="input-wrapper">
+                <div class="input-box">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="给 AI 发送消息" 
+                        rows="1"
+                        autofocus
+                    ></textarea>
+                    <div class="input-actions">
+                        <button class="icon-btn" id="attachBtn" title="附件">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                            </svg>
+                        </button>
+                        <button class="send-btn" id="sendBtn" title="发送">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="input-options">
+                    <button class="option-btn" id="deepThinkBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                        <span>深度思考</span>
+                    </button>
+                    <button class="option-btn" id="webSearchBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                        <span>联网搜索</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let sessionId = null;
+        let isDeepThink = false;
+        let isWebSearch = false;
+
+        // DOM 元素（将在DOMContentLoaded中初始化）
+        let chatContainer, messageInput, sendBtn, attachBtn, deepThinkBtn, webSearchBtn;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('页面加载完成，开始初始化...');
+            
+            // 获取DOM元素
+            chatContainer = document.getElementById('chatContainer');
+            messageInput = document.getElementById('messageInput');
+            sendBtn = document.getElementById('sendBtn');
+            attachBtn = document.getElementById('attachBtn');
+            deepThinkBtn = document.getElementById('deepThinkBtn');
+            webSearchBtn = document.getElementById('webSearchBtn');
+            
+            // 检查元素是否存在
+            if (!chatContainer || !messageInput || !sendBtn) {
+                console.error('无法找到必要的DOM元素');
+                console.log('chatContainer:', chatContainer);
+                console.log('messageInput:', messageInput);
+                console.log('sendBtn:', sendBtn);
+                return;
+            }
+            
+            console.log('DOM元素获取成功');
+            
+            // 创建新会话
+            createNewSession();
+            
+            // 绑定事件
+            sendBtn.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // 自动调整输入框高度
+            messageInput.addEventListener('input', () => {
+                messageInput.style.height = 'auto';
+                messageInput.style.height = messageInput.scrollHeight + 'px';
+            });
+            
+            // 选项按钮
+            if (deepThinkBtn) {
+                deepThinkBtn.addEventListener('click', () => {
+                    isDeepThink = !isDeepThink;
+                    deepThinkBtn.classList.toggle('active', isDeepThink);
+                });
+            }
+            
+            if (webSearchBtn) {
+                webSearchBtn.addEventListener('click', () => {
+                    isWebSearch = !isWebSearch;
+                    webSearchBtn.classList.toggle('active', isWebSearch);
+                });
+            }
+            
+            // 附件按钮
+            if (attachBtn) {
+                attachBtn.addEventListener('click', () => {
+                    alert('附件功能暂未实现');
+                });
+            }
+            
+            console.log('初始化完成');
+        });
+
+        // 创建新会话
+        async function createNewSession() {
+            try {
+                const response = await fetch('/api/session/new', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                sessionId = data.session_id;
+                console.log('会话创建成功:', sessionId);
+            } catch (error) {
+                console.error('创建会话失败:', error);
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            console.log('发送消息:', message);
+            
+            // 禁用输入和发送按钮
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            
+            // 添加用户消息到界面
+            addMessage(message, 'user');
+            
+            // 清空输入框
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            
+            // 显示加载动画
+            const loadingId = addLoadingMessage();
+            
+            try {
+                // 构建请求体
+                const requestBody = {
+                    message: message,
+                    session_id: sessionId
+                };
+                
+                // 发送请求
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                console.log('收到回复:', data);
+                
+                // 移除加载动画
+                removeLoadingMessage(loadingId);
+                
+                // 添加AI回复
+                if (data.response) {
+                    addMessage(data.response, 'ai');
+                } else if (data.error) {
+                    addMessage('抱歉，发生了错误：' + data.error, 'ai');
+                } else {
+                    addMessage('抱歉，没有收到回复', 'ai');
+                }
+                
+                // 更新会话ID（如果返回了新的）
+                if (data.session_id) {
+                    sessionId = data.session_id;
+                }
+                
+            } catch (error) {
+                console.error('发送消息失败:', error);
+                removeLoadingMessage(loadingId);
+                addMessage('抱歉，网络错误，请稍后重试', 'ai');
+            } finally {
+                // 恢复输入和发送按钮
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        // 添加消息到界面
+        function addMessage(content, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = content;
+            
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = getCurrentTime();
+            
+            messageDiv.appendChild(bubble);
+            messageDiv.appendChild(time);
+            
+            chatContainer.appendChild(messageDiv);
+            
+            // 滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        // 添加加载动画
+        function addLoadingMessage() {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai';
+            messageDiv.id = 'loading-' + Date.now();
+            
+            const loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.innerHTML = `
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            `;
+            
+            messageDiv.appendChild(loading);
+            chatContainer.appendChild(messageDiv);
+            
+            // 滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            return messageDiv.id;
+        }
+
+        // 移除加载动画
+        function removeLoadingMessage(loadingId) {
+            const loadingElement = document.getElementById(loadingId);
+            if (loadingElement) {
+                loadingElement.remove();
+            }
+        }
+
+        // 获取当前时间
+        function getCurrentTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+    </script>
+</body>
+</html>
