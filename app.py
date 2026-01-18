@@ -28,6 +28,17 @@ except Exception as e:
 app = Flask(__name__)
 CORS(app)
 
+# 添加before_request钩子，优先处理文件上传，避免415错误
+@app.before_request
+def before_request():
+    """在请求处理前检查文件上传，避免415错误"""
+    if request.method == 'POST':
+        # 如果是multipart/form-data且有文件，跳过后续JSON解析
+        content_type = request.content_type or ''
+        if 'multipart/form-data' in content_type and request.files:
+            # 设置标志，告诉chat函数不要尝试解析JSON
+            request._skip_json_check = True
+
 # 存储每个会话的配置
 sessions = {}
 
@@ -53,8 +64,54 @@ def index():
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """处理聊天请求"""
+    # ===== 第一步：检查是否是语音识别请求（上传音频文件）=====
+    # 使用try-except包裹，避免任何JSON解析错误
     try:
-        data = request.json
+        # 优先检查文件上传（更可靠的方式）
+        # 无论Content-Type是什么，只要有files就尝试处理
+        if request.files:
+            print(f"[DEBUG] 检测到文件上传，Content-Type: {request.content_type}")
+            print(f"[DEBUG] 文件字段: {list(request.files.keys())}")
+            if 'audio' in request.files:
+                print("[DEBUG] 找到audio字段，调用语音识别")
+                return handle_speech_recognition()
+            else:
+                # 如果有文件但不是audio字段，返回错误
+                print(f"[DEBUG] 文件字段列表: {list(request.files.keys())}")
+                return jsonify({'error': f'请求包含文件但未找到audio字段，实际字段: {list(request.files.keys())}'}), 400
+        
+        # 检查Content-Type，如果是multipart/form-data但没有files，可能是错误
+        content_type = request.content_type or ''
+        if 'multipart/form-data' in content_type:
+            print(f"[DEBUG] Content-Type是multipart/form-data但未找到files")
+            return jsonify({'error': '请求类型是multipart/form-data但未找到文件数据'}), 400
+        
+        # ===== 第二步：处理文本消息（JSON格式）=====
+        # 只有Content-Type是application/json时才解析JSON
+        if 'application/json' not in content_type:
+            return jsonify({'error': '请求必须是JSON格式或包含音频文件'}), 400
+        
+        # 安全地获取JSON数据
+        data = request.get_json(silent=True, force=False)
+        if not data:
+            data = {}
+        
+        if not isinstance(data, dict):
+            return jsonify({'error': '请求必须是JSON格式或包含音频文件'}), 400
+    except Exception as e:
+        # 捕获所有异常，包括415错误
+        error_msg = str(e)
+        if '415' in error_msg or 'Unsupported Media Type' in error_msg:
+            # 如果是415错误，可能是文件上传，再次尝试
+            try:
+                if request.files and 'audio' in request.files:
+                    return handle_speech_recognition()
+            except:
+                pass
+        return jsonify({'error': error_msg}), 500
+    
+    # ===== 第三步：处理文本消息内容 =====
+    try:
         message = data.get('message', '')
         session_id = data.get('session_id', str(uuid.uuid4()))
         
@@ -92,7 +149,14 @@ def chat():
                 'session_id': session_id
             })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # 避免在异常处理中触发JSON解析
+        error_msg = str(e)
+        # 如果是415错误，说明可能是文件上传但检测失败
+        if '415' in error_msg or 'Unsupported Media Type' in error_msg:
+            # 再次尝试检查文件上传
+            if request.files and 'audio' in request.files:
+                return handle_speech_recognition()
+        return jsonify({'error': error_msg}), 500
 
 
 @app.route('/api/session/new', methods=['POST'])
@@ -101,6 +165,112 @@ def new_session():
     session_id = str(uuid.uuid4())
     get_session_config(session_id)
     return jsonify({'session_id': session_id})
+
+
+def handle_speech_recognition():
+    """处理语音识别请求"""
+    try:
+        print("[DEBUG handle_speech_recognition] 开始处理语音识别")
+        print(f"[DEBUG handle_speech_recognition] request.files: {request.files}")
+        print(f"[DEBUG handle_speech_recognition] request.files.keys(): {list(request.files.keys()) if request.files else 'None'}")
+        
+        if not request.files:
+            print("[DEBUG handle_speech_recognition] request.files为空")
+            return jsonify({'success': False, 'error': '请求中未找到文件数据'}), 400
+        
+        if 'audio' not in request.files:
+            print(f"[DEBUG handle_speech_recognition] 未找到audio字段，可用字段: {list(request.files.keys())}")
+            return jsonify({'success': False, 'error': f'请上传音频文件（audio字段），实际字段: {list(request.files.keys())}'}), 400
+        
+        audio_file = request.files['audio']
+        print(f"[DEBUG handle_speech_recognition] 音频文件名: {audio_file.filename}")
+        print(f"[DEBUG handle_speech_recognition] 音频文件Content-Type: {audio_file.content_type}")
+        
+        audio_data = audio_file.read()
+        print(f"[DEBUG handle_speech_recognition] 音频数据大小: {len(audio_data)} 字节")
+        
+        if len(audio_data) == 0:
+            print("[DEBUG handle_speech_recognition] 音频文件为空")
+            return jsonify({'success': False, 'error': '音频文件为空'}), 400
+        
+        # 检查文件大小（≤ 25MB）
+        max_size = 25 * 1024 * 1024  # 25MB
+        if len(audio_data) > max_size:
+            return jsonify({
+                'success': False, 
+                'error': f'音频文件过大 ({len(audio_data)} 字节 > {max_size} 字节)，智谱AI限制为25MB'
+            }), 400
+        
+        # 检测音频文件格式（通过文件头）
+        # webm文件头: 1A 45 DF A3
+        # wav文件头: 52 49 46 46 (RIFF)
+        # mp3文件头通常以FF FB或ID3开始
+        file_header = audio_data[:4] if len(audio_data) >= 4 else b''
+        detected_format = 'webm'
+        
+        if file_header[:3] == b'\x1a\x45\xdf':
+            detected_format = 'webm'
+        elif file_header == b'RIFF':
+            detected_format = 'wav'
+        elif file_header[:2] == b'\xff\xfb' or file_header[:3] == b'ID3':
+            detected_format = 'mp3'
+        
+        # 从文件名获取扩展名
+        ext = audio_file.filename.rsplit('.', 1)[1].lower() if '.' in audio_file.filename else detected_format
+        
+        print(f"[DEBUG handle_speech_recognition] 文件名扩展名: {ext}")
+        print(f"[DEBUG handle_speech_recognition] 检测到的格式: {detected_format}")
+        print(f"[DEBUG handle_speech_recognition] 文件头: {file_header.hex()}")
+        
+        # 重要：智谱AI只支持 wav 和 mp3，不支持 webm
+        # 如果格式是webm，返回明确错误提示
+        if ext == 'webm' or detected_format == 'webm':
+            return jsonify({
+                'success': False,
+                'error': '音频格式不支持。智谱AI只支持 wav 和 mp3 格式，当前上传的是 webm 格式。请在前端使用 wav 或 mp3 格式录音。'
+            }), 400
+        
+        # 只使用检测到的格式（wav或mp3）
+        final_format = detected_format if detected_format in ['wav', 'mp3'] else ext
+        
+        from tools.speech_tools import speech_to_text
+        result = speech_to_text(audio_data, final_format)
+        print(f"[DEBUG handle_speech_recognition] 识别结果: {result}")
+        
+        if result['success']:
+            return jsonify({'success': True, 'text': result['text']})
+        else:
+            return jsonify({'success': False, 'error': result['error']}), 500
+    except Exception as e:
+        print(f"[DEBUG handle_speech_recognition] 异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'语音识别处理失败: {str(e)}'}), 500
+
+
+@app.route('/api/speech/recognize', methods=['POST', 'GET'])
+def speech_recognize():
+    """语音识别接口 - 直接转发到handle_speech_recognition"""
+    if request.method == 'GET':
+        return jsonify({'message': '语音识别API正常', 'status': 'ok'})
+    
+    # 增加调试日志
+    print(f"[DEBUG /api/speech/recognize] Content-Type: {request.content_type}")
+    print(f"[DEBUG /api/speech/recognize] request.files: {request.files}")
+    print(f"[DEBUG /api/speech/recognize] request.files.keys(): {list(request.files.keys()) if request.files else 'None'}")
+    
+    # 如果request.files为空，尝试检查是否是Content-Type问题
+    if not request.files:
+        print("[DEBUG /api/speech/recognize] request.files为空，可能Content-Type不正确")
+        # 返回详细错误，让前端fallback到/api/chat
+        return jsonify({
+            'success': False, 
+            'error': '请求中未找到文件数据，请检查Content-Type是否正确',
+            'content_type': request.content_type,
+            'fallback': True
+        }), 400
+    
+    return handle_speech_recognition()
 
 
 if __name__ == '__main__':
@@ -123,7 +293,14 @@ if __name__ == '__main__':
         print("✓ 多智能体系统已加载")
     else:
         print("⚠ 多智能体系统未加载，使用简化模式")
-    print(f"访问地址: http://localhost:{port}")
+    
+    # 打印已注册的路由
+    print("\n已注册的路由:")
+    for rule in app.url_map.iter_rules():
+        if 'speech' in rule.rule or 'api' in rule.rule:
+            print(f"  {rule.rule} -> {rule.endpoint} (methods: {list(rule.methods)})")
+    
+    print(f"\n访问地址: http://localhost:{port}")
     print("按 Ctrl+C 停止服务器")
     print("=" * 50 + "\n")
     
