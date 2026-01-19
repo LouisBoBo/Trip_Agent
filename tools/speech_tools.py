@@ -1,3 +1,12 @@
+import os
+import io
+import json
+import requests
+from typing import Dict, Any
+
+# 获取智谱AI API Key
+ZHIPU_API_KEY = os.getenv('ZHIPU_API_KEY', '')
+
 def speech_to_text(audio_data: bytes, audio_format: str = "wav") -> Dict[str, Any]:
     """
     使用智谱AI进行语音识别

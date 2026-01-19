@@ -2,9 +2,20 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import uuid
 import os
+import sqlite3
+from datetime import datetime
+from tools import local_file
 
 # 禁用自动加载.env文件，避免权限错误
 os.environ['FLASK_SKIP_DOTENV'] = '1'
+
+# 初始化聊天历史表
+try:
+    from tools.init_chat_history import init_chat_history_table
+    init_chat_history_table()
+    print("✓ 聊天历史表已初始化")
+except Exception as e:
+    print(f"⚠ 初始化聊天历史表失败: {e}")
 
 # 尝试导入多智能体系统
 print("正在初始化多智能体系统...")
@@ -41,6 +52,106 @@ def before_request():
 
 # 存储每个会话的配置
 sessions = {}
+
+
+def save_chat_message(session_id: str, message_type: str, content: str, is_voice: bool = False, voice_duration: int = None):
+    """保存聊天消息到数据库"""
+    try:
+        # 使用本地时间而不是UTC时间
+        from datetime import datetime
+        local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        conn = sqlite3.connect(local_file)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO chat_history (session_id, message_type, message_content, is_voice, voice_duration, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (session_id, message_type, content, 1 if is_voice else 0, voice_duration, local_time))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] 保存聊天消息失败: {e}")
+
+
+def get_chat_history(session_id: str, limit: int = 100):
+    """获取聊天历史记录"""
+    try:
+        conn = sqlite3.connect(local_file)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT message_type, message_content, is_voice, voice_duration, created_at
+            FROM chat_history
+            WHERE session_id = ?
+            ORDER BY created_at ASC
+            LIMIT ?
+        ''', (session_id, limit))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        history = []
+        for row in rows:
+            history.append({
+                'type': row[0],
+                'content': row[1],
+                'is_voice': bool(row[2]),
+                'voice_duration': row[3],
+                'created_at': row[4]
+            })
+        return history
+    except Exception as e:
+        print(f"[ERROR] 获取聊天历史失败: {e}")
+        return []
+
+
+def get_all_sessions(limit: int = 50):
+    """获取所有会话列表"""
+    try:
+        conn = sqlite3.connect(local_file)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT session_id, 
+                   MIN(created_at) as first_message_time,
+                   MAX(created_at) as last_message_time,
+                   COUNT(*) as message_count
+            FROM chat_history
+            GROUP BY session_id
+            ORDER BY last_message_time DESC
+            LIMIT ?
+        ''', (limit,))
+        rows = cursor.fetchall()
+        
+        # 获取每个会话的第一条用户消息作为预览
+        sessions = []
+        for row in rows:
+            session_id = row[0]
+            first_time = row[1]
+            last_time = row[2]
+            message_count = row[3]
+            
+            # 获取第一条用户消息作为预览
+            cursor.execute('''
+                SELECT message_content
+                FROM chat_history
+                WHERE session_id = ? AND message_type = 'user'
+                ORDER BY created_at ASC
+                LIMIT 1
+            ''', (session_id,))
+            preview_row = cursor.fetchone()
+            preview = preview_row[0] if preview_row else '新对话'
+            
+            sessions.append({
+                'session_id': session_id,
+                'preview': preview[:50] + ('...' if len(preview) > 50 else ''),
+                'first_time': first_time,
+                'last_time': last_time,
+                'message_count': message_count
+            })
+        
+        conn.close()
+        return sessions
+    except Exception as e:
+        print(f"[ERROR] 获取会话列表失败: {e}")
+        return []
 
 
 def get_session_config(session_id: str):
@@ -115,21 +226,32 @@ def chat():
         message = data.get('message', '')
         session_id = data.get('session_id', str(uuid.uuid4()))
         
+        print(f"[DEBUG chat] 收到消息: {message[:50]}...")
+        print(f"[DEBUG chat] 会话ID: {session_id}")
+        
         if not message:
             return jsonify({'error': '消息不能为空'}), 400
+        
+        # 保存用户消息到历史记录
+        save_chat_message(session_id, 'user', message, is_voice=False)
         
         # 如果多智能体系统可用，使用它
         if MULTI_AGENT_AVAILABLE and execute_graph:
             try:
                 # 获取会话配置
                 session_config = get_session_config(session_id)
+                print(f"[DEBUG chat] 会话配置: {session_config}")
                 
                 # 执行图并获取回复
                 response = execute_graph(message, session_config, verbose=False)
+                print(f"[DEBUG chat] 执行图完成，回复长度: {len(response) if response else 0}")
                 
                 # 如果没有回复，返回默认消息
                 if not response:
                     response = "抱歉，没有收到回复，请稍后重试。"
+                
+                # 保存AI回复到历史记录
+                save_chat_message(session_id, 'ai', response, is_voice=False)
                 
                 return jsonify({
                     'response': response,
@@ -144,6 +266,8 @@ def chat():
         else:
             # 使用简化版本
             response = f"收到您的消息：{message}\n\n多智能体系统未正确加载，请检查配置。"
+            # 保存AI回复到历史记录
+            save_chat_message(session_id, 'ai', response, is_voice=False)
             return jsonify({
                 'response': response,
                 'session_id': session_id
@@ -165,6 +289,56 @@ def new_session():
     session_id = str(uuid.uuid4())
     get_session_config(session_id)
     return jsonify({'session_id': session_id})
+
+
+@app.route('/api/chat/history', methods=['GET'])
+def get_history():
+    """获取聊天历史记录"""
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({'error': '缺少session_id参数'}), 400
+
+    limit = int(request.args.get('limit', 100))
+    history = get_chat_history(session_id, limit)
+    return jsonify({'history': history})
+
+
+@app.route('/api/session/delete', methods=['POST'])
+def delete_session():
+    """删除会话及其所有消息"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        if not session_id:
+            return jsonify({'error': '缺少session_id参数'}), 400
+        
+        conn = sqlite3.connect(local_file)
+        cursor = conn.cursor()
+        
+        # 删除该会话的所有消息
+        cursor.execute('DELETE FROM chat_history WHERE session_id = ?', (session_id,))
+        deleted_count = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        # 同时从内存中的sessions字典删除
+        if session_id in sessions:
+            del sessions[session_id]
+        
+        print(f"[INFO] 删除会话 {session_id}，共删除 {deleted_count} 条消息")
+        return jsonify({'success': True, 'deleted_count': deleted_count})
+    except Exception as e:
+        print(f"[ERROR] 删除会话失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sessions/list', methods=['GET'])
+def list_sessions():
+    """获取所有会话列表"""
+    limit = int(request.args.get('limit', 50))
+    sessions = get_all_sessions(limit)
+    return jsonify({'sessions': sessions})
 
 
 def handle_speech_recognition():

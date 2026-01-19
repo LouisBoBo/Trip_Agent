@@ -25,16 +25,115 @@
             justify-content: center;
             align-items: center;
         }
-        .container {
+        .main-wrapper {
+            display: flex;
             width: 100%;
-            max-width: 900px;
             height: 100vh;
+            max-width: 1400px;
             margin: 0 auto;
+        }
+        .sidebar {
+            width: 300px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background-color: #ffffff;
+        }
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 10px;
+        }
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            color: #666;
+            font-size: 20px;
+            display: none;
+        }
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .history-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: 1px solid #e0e0e0;
+        }
+        .history-item:hover {
+            background-color: #f0f0f0;
+        }
+        .history-item.active {
+            background-color: #e3f2fd;
+            border-color: #007AFF;
+        }
+        .history-item-preview {
+            font-size: 14px;
+            color: #666;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-top: 4px;
+        }
+        .history-item-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+        .history-item-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        .history-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .history-item-delete {
+            opacity: 0;
+            transition: opacity 0.2s;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            color: #999;
+            font-size: 16px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .history-item-delete:hover {
+            color: #ff4444;
+        }
+        .history-item:hover .history-item-delete {
+            opacity: 1;
+        }
+        .history-item.active .history-item-delete {
+            opacity: 1;
+        }
+        .container {
+            flex: 1;
+            height: 100vh;
             display: flex;
             flex-direction: column;
             padding: 20px;
             box-sizing: border-box;
             overflow: hidden;
+            min-width: 0;
         }
         .header {
             text-align: center;
@@ -93,11 +192,91 @@
             color: #333;
             border-bottom-left-radius: 4px;
         }
+        /* 语音消息样式 */
+        .voice-message {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            min-width: 60px;
+            max-width: 200px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .voice-message.playing .voice-icon {
+            animation: voice-wave 1s ease-in-out infinite;
+        }
+        @keyframes voice-wave {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+        }
+        .voice-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+        .voice-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+        .voice-duration {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .voice-waveform {
+            flex: 1;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .voice-wave {
+            width: 3px;
+            background-color: currentColor;
+            border-radius: 2px;
+            transition: height 0.3s;
+        }
+        .voice-wave.active {
+            animation: wave-animation 0.6s ease-in-out infinite;
+        }
+        @keyframes wave-animation {
+            0%, 100% { height: 4px; }
+            50% { height: 16px; }
+        }
         .message-time {
             font-size: 12px;
             color: #999;
             margin-top: 5px;
             padding: 0 4px;
+        }
+        /* 日期分隔符 */
+        .date-divider {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+        .date-divider::before,
+        .date-divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background-color: #e0e0e0;
+        }
+        .date-divider::before {
+            left: 0;
+        }
+        .date-divider::after {
+            right: 0;
+        }
+        .date-divider-text {
+            display: inline-block;
+            padding: 0 12px;
+            background-color: #ffffff;
+            color: #999;
+            font-size: 12px;
+            position: relative;
         }
         .input-container {
             padding: 20px 0;
@@ -241,14 +420,27 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- 顶部标题区域 -->
-        <div class="header">
-            <div class="logo-container">
-                <div class="logo">🐋</div>
-                <h1 class="title">旅行智能助手</h1>
+    <div class="main-wrapper">
+        <!-- 侧边栏 -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">历史对话</div>
+                <button class="sidebar-toggle" id="sidebarToggle">☰</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <!-- 历史消息列表将在这里动态加载 -->
             </div>
         </div>
+        
+        <!-- 主内容区 -->
+        <div class="container">
+            <!-- 顶部标题区域 -->
+            <div class="header">
+                <div class="logo-container">
+                    <div class="logo">🐋</div>
+                    <h1 class="title">旅行智能助手</h1>
+                </div>
+            </div>
 
         <!-- 聊天消息区域 -->
         <div class="chat-container" id="chatContainer">
@@ -324,6 +516,7 @@
         let audioChunks = [];
         let isRecording = false;
         let currentStream = null; // 保存当前的音频流
+        let recordingStartTime = null; // 录音开始时间
         
         // 使用Web Audio API直接录制WAV格式（避免转换）
         let audioContext = null;
@@ -414,8 +607,275 @@
                 const data = await response.json();
                 sessionId = data.session_id;
                 console.log('会话创建成功:', sessionId);
+                // 加载历史消息
+                await loadChatHistory();
+                // 加载会话列表
+                await loadSessionList();
             } catch (error) {
                 console.error('创建会话失败:', error);
+            }
+        }
+
+        // 加载聊天历史（显示在聊天区域，按日期分组）
+        async function loadChatHistory() {
+            if (!sessionId) return;
+            
+            try {
+                const response = await fetch(`/api/chat/history?session_id=${sessionId}&limit=50`);
+                const data = await response.json();
+                
+                if (data.history && data.history.length > 0) {
+                    // 清空聊天容器
+                    chatContainer.innerHTML = '';
+                    
+                    let lastDate = null;
+                    
+                    // 显示历史消息，按日期分组
+                    data.history.forEach(msg => {
+                        // 解析消息的日期
+                        let currentDate = null;
+                        if (msg.created_at) {
+                            try {
+                                const datePart = msg.created_at.split(' ')[0]; // "YYYY-MM-DD"
+                                if (datePart) {
+                                    const [year, month, day] = datePart.split('-');
+                                    currentDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                }
+                            } catch (e) {
+                                console.error('解析日期失败:', e);
+                            }
+                        }
+                        
+                        // 如果日期变化，添加日期分隔符
+                        if (currentDate && (!lastDate || currentDate.getTime() !== lastDate.getTime())) {
+                            addDateDivider(currentDate);
+                            lastDate = currentDate;
+                        }
+                        
+                        // 显示消息
+                        if (msg.is_voice) {
+                            // 语音消息需要特殊处理（暂时显示为文本）
+                            addMessage(msg.content, msg.type, msg.created_at);
+                        } else {
+                            addMessage(msg.content, msg.type, msg.created_at);
+                        }
+                    });
+                    
+                    // 滚动到底部
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            } catch (error) {
+                console.error('加载历史消息失败:', error);
+            }
+        }
+
+        // 添加日期分隔符
+        function addDateDivider(date) {
+            const divider = document.createElement('div');
+            divider.className = 'date-divider';
+            
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            let dateText = '';
+            const diffDays = Math.floor((today - messageDate) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) {
+                dateText = '今天';
+            } else if (diffDays === 1) {
+                dateText = '昨天';
+            } else if (diffDays < 7) {
+                const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                dateText = weekdays[date.getDay()];
+            } else {
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                dateText = `${date.getFullYear()}年${month}月${day}日`;
+            }
+            
+            const textSpan = document.createElement('span');
+            textSpan.className = 'date-divider-text';
+            textSpan.textContent = dateText;
+            divider.appendChild(textSpan);
+            
+            chatContainer.appendChild(divider);
+        }
+
+        // 加载会话列表（显示在侧边栏）
+        async function loadSessionList() {
+            const historyList = document.getElementById('historyList');
+            if (!historyList) return;
+            
+            try {
+                const response = await fetch('/api/sessions/list?limit=50');
+                const data = await response.json();
+                
+                if (data.sessions && data.sessions.length > 0) {
+                    historyList.innerHTML = '';
+                    
+                    // 确保按最后消息时间降序排序（最新的在最上方）
+                    const sortedSessions = [...data.sessions].sort((a, b) => {
+                        // 手动解析时间字符串 "YYYY-MM-DD HH:MM:SS"
+                        const parseTime = (timeStr) => {
+                            if (!timeStr) return 0;
+                            try {
+                                // 格式: "2026-01-19 20:49:46"
+                                const [datePart, timePart] = timeStr.split(' ');
+                                if (!datePart || !timePart) return 0;
+                                const [year, month, day] = datePart.split('-').map(Number);
+                                const [hour, minute, second] = timePart.split(':').map(Number);
+                                const timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
+                                return isNaN(timestamp) ? 0 : timestamp;
+                            } catch (e) {
+                                console.error('解析时间失败:', timeStr, e);
+                                return 0;
+                            }
+                        };
+                        const timeA = parseTime(a.last_time);
+                        const timeB = parseTime(b.last_time);
+                        const result = timeB - timeA; // 降序：最新的在前
+                        
+                        // 如果时间相同，使用session_id作为稳定排序的次要键（确保排序稳定）
+                        if (result === 0) {
+                            return a.session_id.localeCompare(b.session_id);
+                        }
+                        
+                        return result;
+                    });
+                    
+                    // 调试：打印排序后的前3个会话（仅在开发时使用）
+                    // console.log('排序后的会话列表（前3个）:', sortedSessions.slice(0, 3).map(s => ({
+                    //     preview: s.preview,
+                    //     last_time: s.last_time,
+                    //     session_id: s.session_id.substring(0, 8)
+                    // })));
+                    
+                    // 如果当前会话不在列表中（新创建的会话还没有消息），添加到列表顶部
+                    // 注意：只添加新会话，不移动已有会话的位置，保持按时间排序
+                    if (sessionId) {
+                        const currentSessionInList = sortedSessions.find(s => s.session_id === sessionId);
+                        if (!currentSessionInList) {
+                            // 新会话还没有消息，添加到列表顶部（使用当前时间，确保是最新的）
+                            const now = new Date();
+                            const currentTimeStr = now.getFullYear() + '-' + 
+                                String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                                String(now.getDate()).padStart(2, '0') + ' ' + 
+                                String(now.getHours()).padStart(2, '0') + ':' + 
+                                String(now.getMinutes()).padStart(2, '0') + ':' + 
+                                String(now.getSeconds()).padStart(2, '0');
+                            
+                            sortedSessions.unshift({
+                                session_id: sessionId,
+                                preview: '新对话',
+                                last_time: currentTimeStr,
+                                message_count: 0,
+                                first_time: currentTimeStr
+                            });
+                            console.log('新会话添加到列表顶部:', sessionId);
+                        }
+                        // 不再强制移动当前会话到顶部，保持按时间排序
+                    }
+                    
+                    sortedSessions.forEach(session => {
+                        const item = document.createElement('div');
+                        item.className = 'history-item';
+                        if (session.session_id === sessionId) {
+                            item.classList.add('active');
+                        }
+                        
+                        // 侧边栏不显示时间，只显示消息数量
+                        const messageCountText = session.message_count > 0 ? `${session.message_count}条消息` : '新对话';
+                        item.innerHTML = `
+                            <div class="history-item-content">
+                                <div class="history-item-info">
+                                    <div style="font-weight: 500; color: #333; margin-bottom: 4px;">${session.preview}</div>
+                                    <div class="history-item-time">${messageCountText}</div>
+                                </div>
+                                <button class="history-item-delete" title="删除对话" onclick="event.stopPropagation(); deleteSession('${session.session_id}')">×</button>
+                            </div>
+                        `;
+                        
+                        // 点击切换会话
+                        item.addEventListener('click', () => {
+                            switchSession(session.session_id);
+                        });
+                        
+                        historyList.appendChild(item);
+                    });
+                } else {
+                    historyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 14px;">暂无历史对话<br/><span style="font-size: 12px; margin-top: 8px; display: block;">发送消息后会自动保存</span></div>';
+                }
+            } catch (error) {
+                console.error('加载会话列表失败:', error);
+                console.error('错误详情:', error);
+                // 如果API不存在（404），显示友好提示
+                const errorMsg = error.message || String(error);
+                if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
+                    historyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">API未找到<br/><span style="font-size: 12px; margin-top: 8px; display: block;">请重启服务器</span></div>';
+                } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+                    historyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">网络连接失败<br/><span style="font-size: 12px; margin-top: 8px; display: block;">请检查服务器是否运行</span></div>';
+                } else {
+                    historyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">加载失败<br/><span style="font-size: 12px; margin-top: 8px; display: block;">' + errorMsg.substring(0, 50) + '</span></div>';
+                }
+            }
+        }
+
+        // 切换会话
+        async function switchSession(newSessionId) {
+            sessionId = newSessionId;
+            // 重新加载会话列表（更新active状态）
+            await loadSessionList();
+            // 加载新会话的历史消息
+            await loadChatHistory();
+        }
+
+        // 删除会话
+        async function deleteSession(sessionIdToDelete) {
+            // 确认删除
+            if (!confirm('确定要删除这个对话吗？删除后无法恢复。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/session/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionIdToDelete
+                    })
+                });
+
+                // 检查响应状态
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('删除失败 - HTTP状态:', response.status, '响应:', errorText);
+                    alert('删除失败：服务器返回错误 ' + response.status + '\n' + (errorText || '未知错误'));
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('删除响应:', data);
+
+                if (data.success) {
+                    console.log('删除成功:', data);
+                    
+                    // 如果删除的是当前会话，创建新会话
+                    if (sessionIdToDelete === sessionId) {
+                        await createNewSession();
+                    } else {
+                        // 只刷新列表
+                        await loadSessionList();
+                    }
+                } else {
+                    alert('删除失败：' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('删除会话失败:', error);
+                console.error('错误详情:', error.message, error.stack);
+                alert('删除失败：' + (error.message || '网络错误，请检查服务器是否运行'));
             }
         }
 
@@ -476,6 +936,9 @@
                     sessionId = data.session_id;
                 }
                 
+                // 更新会话列表
+                await loadSessionList();
+                
             } catch (error) {
                 console.error('发送消息失败:', error);
                 removeLoadingMessage(loadingId);
@@ -488,14 +951,216 @@
             }
         }
 
+        // 发送语音转文字后的消息（不显示文本消息，因为已经显示了语音消息）
+        async function sendVoiceMessageAsText(text) {
+            console.log('[sendVoiceMessageAsText] 发送语音转文字:', text);
+            console.log('[sendVoiceMessageAsText] 当前会话ID:', sessionId);
+            
+            // 确保有会话ID
+            if (!sessionId) {
+                console.warn('[sendVoiceMessageAsText] 会话ID为空，创建新会话');
+                await createNewSession();
+                console.log('[sendVoiceMessageAsText] 新会话ID:', sessionId);
+            }
+            
+            // 显示加载动画
+            const loadingId = addLoadingMessage();
+            
+            try {
+                // 构建请求体
+                const requestBody = {
+                    message: text,
+                    session_id: sessionId
+                };
+                
+                console.log('[sendVoiceMessageAsText] 发送请求体:', requestBody);
+                
+                // 发送请求
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                console.log('[sendVoiceMessageAsText] 收到回复:', data);
+                console.log('[sendVoiceMessageAsText] 返回的会话ID:', data.session_id);
+                
+                // 移除加载动画
+                removeLoadingMessage(loadingId);
+                
+                // 添加AI回复
+                if (data.response) {
+                    addMessage(data.response, 'ai');
+                } else if (data.error) {
+                    addMessage('抱歉，发生了错误：' + data.error, 'ai');
+                } else {
+                    addMessage('抱歉，没有收到回复', 'ai');
+                }
+                
+                // 更新会话ID（如果返回了新的）
+                if (data.session_id) {
+                    const oldSessionId = sessionId;
+                    sessionId = data.session_id;
+                    console.log('[sendVoiceMessageAsText] 更新会话ID:', oldSessionId, '->', sessionId);
+                } else {
+                    console.warn('[sendVoiceMessageAsText] 响应中未包含会话ID，保持当前会话ID:', sessionId);
+                }
+                
+                // 更新会话列表
+                await loadSessionList();
+                
+            } catch (error) {
+                console.error('[sendVoiceMessageAsText] 发送消息失败:', error);
+                removeLoadingMessage(loadingId);
+                addMessage('抱歉，网络错误，请稍后重试', 'ai');
+            }
+        }
+
         // 添加消息到界面
-        function addMessage(content, type) {
+        function addMessage(content, type, messageTime = null) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
             
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
             bubble.textContent = content;
+            
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            
+            // 如果有消息时间，使用消息时间；否则使用当前时间
+            if (messageTime) {
+                try {
+                    // 解析时间 "YYYY-MM-DD HH:MM:SS"
+                    const parts = messageTime.split(' ');
+                    if (parts.length === 2) {
+                        const timePart = parts[1].split(':');
+                        if (timePart.length >= 2) {
+                            time.textContent = `${timePart[0]}:${timePart[1]}`;
+                        } else {
+                            time.textContent = getCurrentTime();
+                        }
+                    } else {
+                        time.textContent = getCurrentTime();
+                    }
+                } catch (e) {
+                    time.textContent = getCurrentTime();
+                }
+            } else {
+                time.textContent = getCurrentTime();
+            }
+            
+            messageDiv.appendChild(bubble);
+            messageDiv.appendChild(time);
+            
+            chatContainer.appendChild(messageDiv);
+            
+            // 滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        // 添加语音消息到界面
+        function addVoiceMessage(audioBlob, duration, type = 'user') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            
+            const voiceMessage = document.createElement('div');
+            voiceMessage.className = 'voice-message';
+            voiceMessage.dataset.audioBlob = URL.createObjectURL(audioBlob);
+            
+            // 语音图标
+            const voiceIcon = document.createElement('div');
+            voiceIcon.className = 'voice-icon';
+            if (type === 'user') {
+                voiceIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                `;
+            } else {
+                voiceIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                `;
+            }
+            
+            // 波形动画
+            const waveform = document.createElement('div');
+            waveform.className = 'voice-waveform';
+            for (let i = 0; i < 5; i++) {
+                const wave = document.createElement('div');
+                wave.className = 'voice-wave';
+                waveform.appendChild(wave);
+            }
+            
+            // 时长
+            const durationDiv = document.createElement('div');
+            durationDiv.className = 'voice-duration';
+            durationDiv.textContent = duration + '"';
+            
+            voiceMessage.appendChild(voiceIcon);
+            if (type === 'user') {
+                voiceMessage.appendChild(durationDiv);
+                voiceMessage.appendChild(waveform);
+            } else {
+                voiceMessage.appendChild(waveform);
+                voiceMessage.appendChild(durationDiv);
+            }
+            
+            // 点击播放
+            let audio = null;
+            let isPlaying = false;
+            voiceMessage.addEventListener('click', () => {
+                if (isPlaying) {
+                    // 停止播放
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio = null;
+                    }
+                    voiceMessage.classList.remove('playing');
+                    waveform.querySelectorAll('.voice-wave').forEach(w => w.classList.remove('active'));
+                    isPlaying = false;
+                } else {
+                    // 开始播放
+                    audio = new Audio(voiceMessage.dataset.audioBlob);
+                    voiceMessage.classList.add('playing');
+                    waveform.querySelectorAll('.voice-wave').forEach((w, i) => {
+                        setTimeout(() => w.classList.add('active'), i * 100);
+                    });
+                    
+                    audio.play();
+                    isPlaying = true;
+                    
+                    audio.onended = () => {
+                        voiceMessage.classList.remove('playing');
+                        waveform.querySelectorAll('.voice-wave').forEach(w => w.classList.remove('active'));
+                        isPlaying = false;
+                        audio = null;
+                    };
+                    
+                    audio.onerror = () => {
+                        voiceMessage.classList.remove('playing');
+                        waveform.querySelectorAll('.voice-wave').forEach(w => w.classList.remove('active'));
+                        isPlaying = false;
+                        audio = null;
+                        console.error('播放音频失败');
+                    };
+                }
+            });
+            
+            bubble.appendChild(voiceMessage);
             
             const time = document.createElement('div');
             time.className = 'message-time';
@@ -823,6 +1488,7 @@
                 // 开始录音，每200ms收集一次数据
                 mediaRecorder.start(200);
                 isRecording = true;
+                recordingStartTime = Date.now(); // 记录开始时间
                 
                 // 限制录音时长：30秒（智谱AI限制）
                 const maxRecordingTime = 30000; // 30秒
@@ -1204,23 +1870,26 @@
                 }
                 
                 if (result.success) {
-                    // 识别成功，填入输入框
+                    // 识别成功
                     console.log('识别成功，结果:', result.text);
                     
-                    if (messageInput && result.text) {
-                        messageInput.value = result.text;
-                        // 触发input事件以确保UI更新
-                        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        messageInput.style.height = 'auto';
-                        messageInput.style.height = messageInput.scrollHeight + 'px';
-                        messageInput.focus();
-                        
-                        console.log('已填充到输入框:', result.text);
+                    // 计算录音时长（秒）
+                    let duration = 1;
+                    if (recordingStartTime) {
+                        duration = Math.ceil((Date.now() - recordingStartTime) / 1000);
                     } else {
-                        console.warn('messageInput或result.text为空', {
-                            messageInput: !!messageInput,
-                            text: result.text
-                        });
+                        // 如果没有开始时间，使用文件大小粗略估算
+                        duration = Math.max(1, Math.ceil(audioBlob.size / 16000));
+                    }
+                    recordingStartTime = null; // 重置
+                    
+                    // 显示语音消息气泡
+                    addVoiceMessage(audioBlob, duration, 'user');
+                    
+                    // 将识别出的文字发送给后端
+                    if (result.text && result.text.trim()) {
+                        // 直接调用sendMessage，但传入文字内容
+                        await sendVoiceMessageAsText(result.text);
                     }
                     
                     if (voiceStatus) {
@@ -1232,7 +1901,16 @@
                         }, 2000);
                     }
                 } else {
-                    // 识别失败
+                    // 识别失败，但仍然显示语音消息（无法转文字）
+                    let duration = 1;
+                    if (recordingStartTime) {
+                        duration = Math.ceil((Date.now() - recordingStartTime) / 1000);
+                    } else {
+                        duration = Math.max(1, Math.ceil(audioBlob.size / 16000));
+                    }
+                    recordingStartTime = null; // 重置
+                    addVoiceMessage(audioBlob, duration, 'user');
+                    
                     const errorMsg = result.error || '识别失败，请重试';
                     if (voiceStatus) {
                         voiceStatus.textContent = errorMsg;
@@ -1271,6 +1949,7 @@
                 audioChunks = [];
                 mediaRecorder = null;
                 currentStream = null;
+                // 注意：recordingStartTime 在显示语音消息时重置
             }
         }
     </script>
